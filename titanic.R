@@ -6,8 +6,8 @@
 ## Getting the data ----
 readData <- function(file.name, column.types, missing.types) {
   read.csv( file.path( getwd(), "data", file.name), 
-            colClasses=train.column.types,
-            na.strings=missing.types )
+            colClasses = column.types,
+            na.strings = missing.types )
 }
 
 # Munging metadata
@@ -31,12 +31,13 @@ test.column.types <- train.column.types[-2]     # # no Survived column in test.c
 
 # Read the data from file
 train.raw <- readData(train.data.file, 
-                      train.column.types, missing.types)
+                      train.column.types,
+                      missing.types)
 df.train <- train.raw
 
-test.raw <- read.csv("data/titanic_test.csv", na.strings = missing.types)
-  readData(test.data.file, 
-                     test.column.types, missing.types)
+test.raw <- readData(test.data.file, 
+                     test.column.types,
+                     missing.types)
 df.infer <- test.raw
 
 
@@ -86,6 +87,7 @@ mosaicplot(df.train$Embarked ~ df.train$Survived,
 
 # Correlations
 library(corrgram)
+library(plyr)
 corrgram.data <- df.train
 ## change features of factor type to numeric type for inclusion on correlogram
 corrgram.data$Survived <- as.numeric(corrgram.data$Survived)
@@ -113,11 +115,11 @@ head(df.train$Name, n=10L)
 ## function for extracting honorific (i.e. title) from the Name feature
 getTitle <- function(data) {
   title.dot.start <- regexpr("\\,[A-Z ]{1,20}\\.", data$Name, TRUE)
-  title.comma.end <- title.dot.start 
-  + attr(title.dot.start, "match.length")-1
+  title.comma.end <- title.dot.start +
+    attr(title.dot.start, "match.length") - 1
   data$Title <- substr(data$Name, title.dot.start+2, title.comma.end-1)
   return (data$Title)
-}   
+}  
 
 df.train$Title <- getTitle(df.train)
 unique(df.train$Title)
@@ -126,7 +128,7 @@ unique(df.train$Title)
 options(digits=2)
 require(Hmisc)
 bystats(df.train$Age, df.train$Title, 
-        fun=function(x)c(Mean=mean(x),Median=median(x)))
+        fun=function(x) c(Mean=mean(x),Median=median(x)) )
 
 ## list of titles with missing Age value(s) requiring imputation
 titles.na.train <- c("Dr", "Master", "Mrs", "Miss", "Mr")
@@ -181,6 +183,7 @@ changeTitles <- function(data, old.titles, new.title) {
   }
   return (data$Title)
 }
+
 ## Title consolidation
 df.train$Title <- changeTitles(df.train, 
                                c("Capt", "Col", "Don", "Dr", 
@@ -246,3 +249,6 @@ train.keeps <- c("Fate", "Sex", "Boat.dibs", "Age", "Title",
                  "Class", "Deck", "Side", "Fare", "Fare.pp", 
                  "Embarked", "Family")
 df.train.munged <- df.train[train.keeps]
+
+
+
