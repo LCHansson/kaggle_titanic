@@ -104,6 +104,7 @@ corrgram(corrgram.data[,corrgram.vars], order=FALSE,
 # Summary statistics
 summary(df.train$Age)
 
+
 ## Feature engineering ----
 
 # Investigate names
@@ -125,7 +126,7 @@ df.train$Title <- getTitle(df.train)
 unique(df.train$Title)
 
 # Identify the titles which have at least one record with an age missing
-options(digits=2)
+options(digits = 2)
 require(Hmisc)
 bystats(df.train$Age, df.train$Title, 
         fun=function(x) c(Mean=mean(x),Median=median(x)) )
@@ -135,7 +136,7 @@ titles.na.train <- c("Dr", "Master", "Mrs", "Miss", "Mr")
 
 imputeMedian <- function(impute.var, filter.var, var.levels) {
   for (v in var.levels) {
-    impute.var[ which( filter.var == v)] <- impute(impute.var[ 
+    impute.var[ which( filter.var == v)] <- Hmisc::impute(impute.var[ 
       which( filter.var == v)])
   }
   return (impute.var)
@@ -162,18 +163,17 @@ subset(df.train, Fare < 7)[order(subset(df.train, Fare < 7)$Fare,
                                  subset(df.train, Fare < 7)$Pclass), 
                            c("Age", "Title", "Pclass", "Fare")]
 
-## impute missings on Fare feature with median fare by Pclass
+# impute missings on Fare feature with median fare by Pclass
 df.train$Fare[ which( df.train$Fare == 0 )] <- NA
 df.train$Fare <- imputeMedian(df.train$Fare, df.train$Pclass, 
                               as.numeric(levels(df.train$Pclass)))
 
 
 # Title imputation
-df.train$Title <- factor(df.train$Title,
-                         c("Capt","Col","Major","Sir","Lady","Rev",
-                           "Dr","Don","Jonkheer","the Countess","Mrs",
-                           "Ms","Mr","Mme","Mlle","Miss","Master"))
-boxplot(df.train$Age ~ df.train$Title, 
+boxplot(df.train$Age ~ factor(df.train$Title,
+                              c("Capt","Col","Major","Sir","Lady","Rev",
+                                "Dr","Don","Jonkheer","the Countess","Mrs",
+                                "Ms","Mr","Mme","Mlle","Miss","Master")), 
         main="Passenger Age by Title", xlab="Title", ylab="Age")
 
 ## function for assigning a new title value to old title(s) 
@@ -252,3 +252,219 @@ df.train.munged <- df.train[train.keeps]
 
 
 
+## Fitting a model ----
+library(caret)
+# Munge: split training data into train batch and test batch
+set.seed(23)
+training.rows <- createDataPartition(df.train.munged$Fate, 
+                                     p = 0.8, list = FALSE)
+train.batch <- df.train.munged[training.rows, ]
+test.batch <- df.train.munged[-training.rows, ]
+
+## Logistic regression
+# First attempt: Logistic regression
+Titanic.logit.1 <- glm(Fate ~ Sex + Class + Age + Family + Embarked + Fare, 
+                       data = train.batch, family=binomial("logit"))
+# Investigate the model
+Titanic.logit.1
+1 - pchisq(332.2, df=8)
+# Test the model
+anova(Titanic.logit.1, test="Chisq")
+
+# Second attempt: Replacing fares with fares *per person*
+Titanic.logit.2 <- glm(Fate ~ Sex + Class + Age + Family + Embarked + Fare.pp,                        
+                       data = train.batch, family=binomial("logit"))
+anova(Titanic.logit.2, test="Chisq")
+
+# Third attempt: Dropping fares altogether and passing a slightly slimmer formula
+glm(Fate ~ Sex + Class + Age + Family + Embarked, 
+    data = train.batch, family=binomial("logit")
+
+    
+## Caret modelling: Logistic regression
+# Define control function to handle optional arguments for train function
+# Models to be assessed based on largest absolute area under ROC curve
+options(digits = 5)
+library(pROC)
+cv.ctrl <- trainControl(method = "repeatedcv", repeats = 3,
+                        summaryFunction = twoClassSummary,
+                        classProbs = TRUE)
+
+# First attempt: Using repeated cross validation
+set.seed(35)
+glm.tune.1 <- train(Fate ~ Sex + Class + Age + Family + Embarked,
+                    data = train.batch,
+                    method = "glm",
+                    metric = "ROC",
+                    trControl = cv.ctrl)
+# Evaluate the model
+glm.tune.1
+summary(glm.tune.1)
+
+# Second attempt: As above, but using class compression on the Embarked feature
+set.seed(35)
+glm.tune.2 <- train(Fate ~ Sex + Class + Age + Family + I(Embarked=="S"),
+                      data = train.batch, method = "glm",
+                      metric = "ROC", trControl = cv.ctrl)
+summary(glm.tune.2)
+
+
+# Third attempt: As above, but including the Title feature
+set.seed(35)
+glm.tune.3 <- train(Fate ~ Sex + Class + Title + Age 
+                      + Family + I(Embarked=="S"), 
+                      data = train.batch, method = "glm",
+                      metric = "ROC", trControl = cv.ctrl)
+summary(glm.tune.3)
+
+# Fifth attempt: Include gender and class considerations.
+set.seed(35)
+glm.tune.5 <- train(Fate ~ Class + I(Title=="Mr") + I(Title=="Noble") 
+                      + Age + Family + I(Embarked=="S") 
+                      + I(Title=="Mr"&Class=="Third"), 
+                      data = train.batch, 
+                      method = "glm", metric = "ROC", 
+                      trControl = cv.ctrl)
+summary(glm.tune.5)
+
+
+## Caret modelling: Boosting
+library(ada)
+
+# note the dot preceding each variable
+ada.grid <- expand.grid(.iter = c(50, 100),
+                        .maxdepth = c(4, 8),
+                        .nu = c(0.1, 1))
+
+set.seed(35)
+ada.tune <- train(Fate ~ Sex + Class + Age + Family + Embarked, 
+                  data = train.batch,
+                  method = "ada",
+                  metric = "ROC",
+                  tuneGrid = ada.grid,
+                  trControl = cv.ctrl)
+# Evaluate the model
+ada.tune
+plot(ada.tune) 
+
+
+## Caret modelling: Random Forest
+library(randomForest)
+rf.grid <- data.frame(.mtry = c(2, 3))
+set.seed(35)
+rf.tune <- train(Fate ~ Sex + Class + Age + Family + Embarked, 
+                 data = train.batch,
+                 method = "rf",
+                 metric = "ROC",
+                 tuneGrid = rf.grid,
+                 trControl = cv.ctrl)
+rf.tune
+plot(rf.tune)
+
+## Caret modelling: Support Vector Machine
+library(kernlab)
+set.seed(35)
+svm.tune <- train(Fate ~ Sex + Class + Age + Family + Embarked, 
+                  data = train.batch,
+                  method = "svmRadial",
+                  tuneLength = 9,
+                  preProcess = c("center", "scale"),
+                  metric = "ROC",
+                  trControl = cv.ctrl)
+svm.tune
+plot(svm.tune)
+
+
+## Evaluating the results ----
+library(e1071)
+# Logistic regression model
+glm.pred <- predict(glm.tune.5, test.batch)
+confusionMatrix(glm.pred, test.batch$Fate)
+
+# Boosted model
+ada.pred <- predict(ada.tune, test.batch)
+confusionMatrix(ada.pred, test.batch$Fate)
+
+# Random Forest model
+rf.pred <- predict(rf.tune, test.batch)
+confusionMatrix(rf.pred, test.batch$Fate)
+
+# SVM model 
+svm.pred <- predict(svm.tune, test.batch)
+confusionMatrix(svm.pred, test.batch$Fate)
+
+  
+## Plot ROC curves
+# Logistic regression model (BLACK curve)
+glm.probs <- predict(glm.tune.5, test.batch, type = "prob")
+glm.ROC <- roc(response = test.batch$Fate,
+               predictor = glm.probs$Survived,
+               levels = levels(test.batch$Fate))
+plot(glm.ROC, type="S")
+
+# Boosted model (GREEN curve)
+ada.probs <- predict(ada.tune, test.batch, type = "prob")
+ada.ROC <- roc(response = test.batch$Fate,
+               predictor = ada.probs$Survived,
+               levels = levels(test.batch$Fate))
+plot(ada.ROC, add=TRUE, col="green")  
+
+# Random Forest model (RED curve)
+rf.probs <- predict(rf.tune, test.batch, type = "prob")
+rf.ROC <- roc(response = test.batch$Fate,
+              predictor = rf.probs$Survived,
+              levels = levels(test.batch$Fate))
+plot(rf.ROC, add=TRUE, col="red")
+
+# SVM model (BLUE curve)
+svm.probs <- predict(svm.tune, test.batch, type = "prob")
+svm.ROC <- roc(response = test.batch$Fate,
+               predictor = svm.probs$Survived,
+               levels = levels(test.batch$Fate))
+plot(svm.ROC, add=TRUE, col="blue")
+
+## Dotplot of model performance
+cv.values <- resamples(list(Logit = glm.tune.5, Ada = ada.tune, 
+                            RF = rf.tune, SVM = svm.tune))
+dotplot(cv.values, metric = "ROC")
+
+## Preparing an actual submission ----
+df.infer <- test.raw
+# get titles
+df.infer$Title <- getTitle(df.infer)
+
+# consolidate titles
+df.infer$Title <- changeTitles(df.infer, c("Dona", "Ms"), "Mrs")
+df.infer$Title <- changeTitles(df.infer, c("Col", "Dr", "Rev"), "Noble")
+df.infer$Title <- changeTitles(df.infer, c("Mlle", "Mme"), "Miss")
+
+# impute missing Age values
+titles.na.test <- c("Master", "Mrs", "Miss", "Mr")
+df.infer$Age <- imputeMedian(df.infer$Age, df.infer$Title, titles.na.test)
+
+# convert title to factor
+df.infer$Title <- as.factor(df.infer$Title)
+
+
+# impute missing fares
+df.infer$Fare[ which( df.infer$Fare == 0)] <- NA
+df.infer$Fare <- imputeMedian(df.infer$Fare, df.infer$Pclass, 
+                              as.numeric(levels(df.infer$Pclass)))
+# add the other features
+df.infer <- featureEngrg(df.infer)
+
+# data prepped for casting predictions
+test.keeps <- train.keeps[-1]
+pred.these <- df.infer[test.keeps]
+
+# use the logistic regression model to generate predictions
+Survived <- predict(glm.tune.5, newdata = pred.these)
+
+# reformat predictions to 0 or 1 and link to PassengerId in a data frame
+Survived <- revalue(Survived, c("Survived" = 1, "Perished" = 0))
+predictions <- as.data.frame(Survived)
+predictions$PassengerId <- df.infer$PassengerId
+
+# write predictions to csv file for submission to Kaggle
+write.csv(predictions[,c("PassengerId", "Survived")], 
+          file="data/Titanic_predictions.csv", row.names=FALSE, quote=FALSE)
