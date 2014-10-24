@@ -457,7 +457,7 @@ plot(rf.ROC, add=TRUE, col="gray80")
 
 ## Dotplot of model performance
 cv.values <- resamples(list(Logit = glm.tune.5, Ada = ada.tune, 
-                            RF = rf.tune, SVM = svm.tune, ERf = lmProfile))
+                            RF = rf.tune, SVM = svm.tune))
 dotplot(cv.values, metric = "ROC")
 
 
@@ -494,7 +494,7 @@ test.keeps <- train.keeps[-1]
 pred.these <- df.infer[test.keeps]
 
 # use the logistic regression model to generate predictions
-Survived <- predict(glm.tune.5, newdata = pred.these)
+Survived <- predict(lmProfile, newdata = pred.these)[[1]]
 
 # reformat predictions to 0 or 1 and link to PassengerId in a data frame
 Survived <- revalue(Survived, c("Survived" = 1, "Perished" = 0))
