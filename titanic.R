@@ -94,7 +94,7 @@ corrgram.data$Survived <- as.numeric(corrgram.data$Survived)
 corrgram.data$Pclass <- as.numeric(corrgram.data$Pclass)
 corrgram.data$Embarked <- revalue(corrgram.data$Embarked, 
                                   c("C" = 1, "Q" = 2, "S" = 3))
-## generate correlogram
+# generate correlogram
 corrgram.vars <- c("Survived", "Pclass", "Sex", "Age", 
                    "SibSp", "Parch", "Fare", "Embarked")
 corrgram(corrgram.data[,corrgram.vars], order=FALSE, 
@@ -113,7 +113,7 @@ names(df.train)
 head(df.train$Name, n=10L)
 
 
-## function for extracting honorific (i.e. title) from the Name feature
+# function for extracting honorific (i.e. title) from the Name feature
 getTitle <- function(data) {
   title.dot.start <- regexpr("\\,[A-Z ]{1,20}\\.", data$Name, TRUE)
   title.comma.end <- title.dot.start +
@@ -131,7 +131,7 @@ require(Hmisc)
 bystats(df.train$Age, df.train$Title, 
         fun=function(x) c(Mean=mean(x),Median=median(x)) )
 
-## list of titles with missing Age value(s) requiring imputation
+# list of titles with missing Age value(s) requiring imputation
 titles.na.train <- c("Dr", "Master", "Mrs", "Miss", "Mr")
 
 imputeMedian <- function(impute.var, filter.var, var.levels) {
@@ -142,8 +142,9 @@ imputeMedian <- function(impute.var, filter.var, var.levels) {
   return (impute.var)
 }
 
-# Imputation of missing data: Honorifics/titles
-## Inspect titles before and after imputation
+## Imputation of missing data
+# Honorifics/titles
+# (Inspect titles before and after imputation)
 df.train$Age[which(df.train$Title=="Dr")]
 
 df.train$Age <- imputeMedian(df.train$Age, df.train$Title, 
@@ -152,31 +153,28 @@ df.train$Age[which(df.train$Title=="Dr")]
 
 summary(df.train$Age)
 
-# Imputation of missing data: Embarkment location
-
+# Embarkment location
 summary(df.train$Embarked)
 df.train$Embarked[which(is.na(df.train$Embarked))] <- 'S'
 
-# Imputation of missing data: Fare
+# Fare
 summary(df.train$Fare)
 subset(df.train, Fare < 7)[order(subset(df.train, Fare < 7)$Fare, 
                                  subset(df.train, Fare < 7)$Pclass), 
                            c("Age", "Title", "Pclass", "Fare")]
-
 # impute missings on Fare feature with median fare by Pclass
 df.train$Fare[ which( df.train$Fare == 0 )] <- NA
 df.train$Fare <- imputeMedian(df.train$Fare, df.train$Pclass, 
                               as.numeric(levels(df.train$Pclass)))
 
-
-# Title imputation
+# Titles
 boxplot(df.train$Age ~ factor(df.train$Title,
                               c("Capt","Col","Major","Sir","Lady","Rev",
                                 "Dr","Don","Jonkheer","the Countess","Mrs",
                                 "Ms","Mr","Mme","Mlle","Miss","Master")), 
         main="Passenger Age by Title", xlab="Title", ylab="Age")
 
-## function for assigning a new title value to old title(s) 
+# function for assigning a new title value to old title(s) 
 changeTitles <- function(data, old.titles, new.title) {
   for (honorific in old.titles) {
     data$Title[ which( data$Title == honorific)] <- new.title
@@ -184,7 +182,7 @@ changeTitles <- function(data, old.titles, new.title) {
   return (data$Title)
 }
 
-## Title consolidation
+# Title consolidation
 df.train$Title <- changeTitles(df.train, 
                                c("Capt", "Col", "Don", "Dr", 
                                  "Jonkheer", "Lady", "Major", 
@@ -200,38 +198,38 @@ df.train$Title <- as.factor(df.train$Title)
 library(plyr)     # for the revalue function 
 library(stringr)  # for the str_sub function
 
-## test a character as an EVEN single digit
+# test a character as an EVEN single digit
 isEven <- function(x) x %in% c("0","2","4","6","8") 
-## test a character as an ODD single digit
+# test a character as an ODD single digit
 isOdd <- function(x) x %in% c("1","3","5","7","9") 
 
-## function to add features to training or test data frames
+# function to add features to training or test data frames
 featureEngrg <- function(data) {
-  ## Using Fate ILO Survived because term is shorter and just sounds good
+  # Using Fate ILO Survived because term is shorter and just sounds good
   data$Fate <- data$Survived
-  ## Revaluing Fate factor to ease assessment of confusion matrices later
+  # Revaluing Fate factor to ease assessment of confusion matrices later
   data$Fate <- revalue(data$Fate, c("1" = "Survived", "0" = "Perished"))
-  ## Boat.dibs attempts to capture the "women and children first"
-  ## policy in one feature.  Assuming all females plus males under 15
-  ## got "dibs' on access to a lifeboat
+  # Boat.dibs attempts to capture the "women and children first"
+  # policy in one feature.  Assuming all females plus males under 15
+  # got "dibs' on access to a lifeboat
   data$Boat.dibs <- "No"
   data$Boat.dibs[which(data$Sex == "female" | data$Age < 15)] <- "Yes"
   data$Boat.dibs <- as.factor(data$Boat.dibs)
-  ## Family consolidates siblings and spouses (SibSp) plus
-  ## parents and children (Parch) into one feature
+  # Family consolidates siblings and spouses (SibSp) plus
+  # parents and children (Parch) into one feature
   data$Family <- data$SibSp + data$Parch
-  ## Fare.pp attempts to adjust group purchases by size of family
+  # Fare.pp attempts to adjust group purchases by size of family
   data$Fare.pp <- data$Fare/(data$Family + 1)
-  ## Giving the traveling class feature a new look
+  # Giving the traveling class feature a new look
   data$Class <- data$Pclass
   data$Class <- revalue(data$Class, 
                         c("1"="First", "2"="Second", "3"="Third"))
-  ## First character in Cabin number represents the Deck 
+  # First character in Cabin number represents the Deck 
   data$Deck <- substring(data$Cabin, 1, 1)
   data$Deck[ which( is.na(data$Deck ))] <- "UNK"
   data$Deck <- as.factor(data$Deck)
-  ## Odd-numbered cabins were reportedly on the port side of the ship
-  ## Even-numbered cabins assigned Side="starboard"
+  # Odd-numbered cabins were reportedly on the port side of the ship
+  # Even-numbered cabins assigned Side="starboard"
   data$cabin.last.digit <- str_sub(data$Cabin, -1)
   data$Side <- "UNK"
   data$Side[which(isEven(data$cabin.last.digit))] <- "port"
@@ -241,7 +239,7 @@ featureEngrg <- function(data) {
   return (data)
 }
 
-## add remaining features to training data frame
+# add remaining features to training data frame
 df.train <- featureEngrg(df.train)
 
 # Finish off munging by only keeping relevant data
@@ -375,6 +373,30 @@ svm.tune
 plot(svm.tune)
 
 
+## Enhanced caret RF evaulation
+# See (e.g.):
+# - http://topepo.github.io/caret/featureselection.html
+
+set.seed(10)
+predictors <- df.train.munged[-1]
+outcomes <- df.train.munged[[1]]
+subsets <- c(1:5, 10, 15, 20, 25, 50)
+
+# Variable selection
+library(parallel)
+ctrl <- rfeControl(functions = rfFuncs,
+                   method = "repeatedcv",
+                   repeats = 10,
+                   verbose = FALSE)
+
+lmProfile <- rfe(predictors, outcomes,
+                 sizes = subsets,
+                 rfeControl = ctrl)
+
+lmProfile
+
+
+
 ## Evaluating the results ----
 library(e1071)
 # Logistic regression model
@@ -393,6 +415,9 @@ confusionMatrix(rf.pred, test.batch$Fate)
 svm.pred <- predict(svm.tune, test.batch)
 confusionMatrix(svm.pred, test.batch$Fate)
 
+# Enhanced RF model
+erf.pred <- predict(lmProfile, test.batch)
+confusionMatrix(erf.pred[[1]], test.batch$Fate)
   
 ## Plot ROC curves
 # Logistic regression model (BLACK curve)
@@ -423,10 +448,21 @@ svm.ROC <- roc(response = test.batch$Fate,
                levels = levels(test.batch$Fate))
 plot(svm.ROC, add=TRUE, col="blue")
 
+# Tweaked Random Forest model (GRAY curve)
+erf.probs <- predict(lmProfile, test.batch)
+erf.ROC <- roc(response = test.batch$Fate,
+              predictor = erf.probs$Survived,
+              levels = levels(test.batch$Fate))
+plot(rf.ROC, add=TRUE, col="gray80")
+
 ## Dotplot of model performance
 cv.values <- resamples(list(Logit = glm.tune.5, Ada = ada.tune, 
-                            RF = rf.tune, SVM = svm.tune))
+                            RF = rf.tune, SVM = svm.tune, ERf = lmProfile))
 dotplot(cv.values, metric = "ROC")
+
+
+
+
 
 ## Preparing an actual submission ----
 df.infer <- test.raw
